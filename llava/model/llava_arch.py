@@ -20,6 +20,8 @@ import torch.nn as nn
 
 from .multimodal_encoder.builder import build_vision_tower
 from .multimodal_projector.builder import build_vision_projector
+from .attention_encoder.builder import build_attention_tower
+from .attention_projector.builder import build_attention_projector
 
 from llava.constants import IGNORE_INDEX, IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_PATCH_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN
 
@@ -40,11 +42,18 @@ class LlavaMetaModel:
                     torch.empty(config.hidden_size, dtype=self.dtype)
                 )
 
+        self.attention_tower = build_attention_tower()
+        self.attention_projector = build_attention_projector(config)
+
     def get_vision_tower(self):
         vision_tower = getattr(self, 'vision_tower', None)
         if type(vision_tower) is list:
             vision_tower = vision_tower[0]
         return vision_tower
+
+    def get_attention_tower(self):
+        attention_tower = build_attention_tower()
+        return attention_tower
 
     def initialize_vision_modules(self, model_args, fsdp=None):
         vision_tower = model_args.vision_tower
@@ -88,6 +97,8 @@ class LlavaMetaModel:
             # In case it is frozen by LoRA
             for p in self.mm_projector.parameters():
                 p.requires_grad = True
+
+        self.attention_projector = build_attention_projector(self.config)
 
         if pretrain_mm_mlp_adapter is not None:
             mm_projector_weights = torch.load(pretrain_mm_mlp_adapter, map_location='cpu')
@@ -140,6 +151,9 @@ class LlavaMetaForCausalLM(ABC):
     def encode_images(self, images):
         image_features = self.get_model().get_vision_tower()(images)
         image_features = self.get_model().mm_projector(image_features)
+        attention_features = self.get_attention_tower(images)
+        attention_features = self.attention_projector(attention_features)
+        image_features = torch.cat((image_features, attention_features), dim=-1)
         return image_features
 
     def prepare_inputs_labels_for_multimodal(

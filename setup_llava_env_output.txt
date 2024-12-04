@@ -1,0 +1,2 @@
+Current conda environment: 
+/var/spool/slurmd/job9531221/slurm_script: /scratch/am11351/conda-envs/envs/llavaenv/bin/deepspeed: /home/am11351/.conda/envs/llavaenv/bin/python: bad interpreter: No such file or directory
